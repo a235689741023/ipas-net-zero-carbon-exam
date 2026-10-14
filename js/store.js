@@ -28,6 +28,7 @@
       currentRound: null,  // 進行中的回合，供續作
       learningRead: {},    // unitId -> true
       highlights: {},      // unitId -> [{key,start,end,color}]（學習區螢光標記）
+      flags: {},           // qid -> {unfamiliar:bool, important:bool}（手動標記清單）
       settings: { roundSize:10, shuffleOptions:true, theme:'auto' },
       createdAt: new Date().toISOString()
     };
@@ -72,6 +73,19 @@
     var p = load();
     if (!p.questionState[id]) p.questionState[id] = defaultSRS();
     return p.questionState[id];
+  }
+
+  // ---------- 手動標記清單（不熟悉 / 重要） ----------
+  function getFlags(id){ var p = load(); return p.flags[id] || { unfamiliar:false, important:false }; }
+  function isFlagged(id, which){ var f = load().flags[id]; return !!(f && f[which]); }
+  function toggleFlag(id, which){
+    var p = load();
+    var f = p.flags[id] || { unfamiliar:false, important:false };
+    f[which] = !f[which];
+    if (!f.unfamiliar && !f.important) delete p.flags[id];
+    else p.flags[id] = f;
+    save();
+    return !!f[which];
   }
 
   // ---------- SRS 作答後更新（§4.4.2） ----------
@@ -207,6 +221,7 @@
     load: load, save: save, reset: reset,
     exportJSON: exportJSON, importJSON: importJSON,
     getState: getState, defaultSRS: defaultSRS,
+    getFlags: getFlags, isFlagged: isFlagged, toggleFlag: toggleFlag,
     applyAnswer: applyAnswer,
     dayLog: dayLog, markServed: markServed,
     pickRound: pickRound, priorityOf: priorityOf, shuffleKeys: shuffleKeys

@@ -193,6 +193,22 @@ mark{background:#ffe08a;color:#000;border-radius:3px;padding:0 2px}
 .pill.due{background:var(--warn-bg);color:var(--warn)}
 .pill.ok{background:var(--ok-bg);color:var(--ok)}
 
+/* 複習清單分段切換 */
+.seg{display:flex;gap:8px;margin-top:14px}
+.seg-btn{flex:1;padding:9px 4px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface-2);color:var(--muted);font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+.seg-btn.active{background:var(--brand);color:#fff;border-color:transparent}
+
+/* 手動標記按鈕（不熟悉 / 重要） */
+.flag-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.flagbtn.on-unfam{background:#fff4d6;border-color:#f1c40f;color:#8a6d00}
+.flagbtn.on-imp{background:#ffe3ec;border-color:#ff7fab;color:#a01450}
+:root[data-theme="dark"] .flagbtn.on-unfam{background:#3a3016;color:#f3cf6a;border-color:#8a6d00}
+:root[data-theme="dark"] .flagbtn.on-imp{background:#3a1a28;color:#ff9ec1;border-color:#a01450}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .flagbtn.on-unfam{background:#3a3016;color:#f3cf6a;border-color:#8a6d00}
+  :root:not([data-theme="light"]) .flagbtn.on-imp{background:#3a1a28;color:#ff9ec1;border-color:#a01450}}
+
 /* settings */
 .setting-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--border)}
 .setting-row:last-child{border-bottom:none}

@@ -123,7 +123,7 @@
       case 'quiz': html = viewQuiz(); break;
       case 'result': html = viewResult(); break;
       case 'learn': html = r.arg ? viewUnit(r.arg) : viewLearnHome(); break;
-      case 'wrong': html = viewWrong(); break;
+      case 'wrong': html = viewWrong(r.arg); break;
       case 'settings': html = viewSettings(); break;
       default: html = viewHome();
     }
@@ -167,7 +167,7 @@
       '<div class="progressbar"><i style="width:' + readPct + '%"></i></div>' +
       '<div class="btn-row" style="margin-top:12px">' +
       '<button class="btn" data-act="nav" data-h="#/learn">📖 繼續學習</button>' +
-      '<button class="btn" data-act="nav" data-h="#/wrong">📕 錯題本（' + s.wrong + '）</button>' +
+      '<button class="btn" data-act="nav" data-h="#/wrong">📕 複習清單</button>' +
       '</div></div>' +
       '<div class="card">' +
       '<div class="section-title" style="margin-top:0">快速練習</div>' +
@@ -210,6 +210,7 @@
       '<div class="progressbar" style="flex:1"><i style="width:' + pct + '%"></i></div></div>' +
       '<div>' + srcChips(q) + '</div>' +
       '<div class="qstem">' + esc(q.stem) + '</div>' +
+      '<div class="flag-row">' + flagBtns(q.id) + '</div>' +
       '<div class="options" id="opts">' + opts + '</div>' +
       '<div class="btn-row" style="margin-top:18px">' +
       '<button class="btn" data-act="prev" ' + (idx === 0 ? 'disabled' : '') + '>← 上一題</button>' +
@@ -228,6 +229,17 @@
     if (q.unit) s += '<span class="chip">' + esc(q.unit) + '</span>';
     return s;
   }
+  // ---------- 手動標記清單按鈕（不熟悉 / 重要） ----------
+  function flagLabel(which, on) {
+    if (which === 'unfamiliar') return on ? '🤔 不熟悉 ✓' : '🤔 標為不熟悉';
+    return on ? '⭐ 重要 ✓' : '⭐ 標為重要';
+  }
+  function flagBtn(id, which) {
+    var on = S.isFlagged(id, which);
+    return '<button class="btn ghost sm flagbtn' + (on ? ' on-' + (which === 'unfamiliar' ? 'unfam' : 'imp') : '') +
+      '" data-act="flag" data-which="' + which + '" data-id="' + id + '">' + flagLabel(which, on) + '</button>';
+  }
+  function flagBtns(id) { return flagBtn(id, 'unfamiliar') + flagBtn(id, 'important'); }
 
   // ================= 模擬考 — 結果 / 檢討 =================
   function viewResult() {
@@ -267,6 +279,7 @@
     var ru = relatedUnit(q);
     var links = '';
     if (ru) links += '<button class="btn ghost sm" data-act="nav" data-h="#/learn/' + encodeURIComponent(ru.id) + '">查看相關學習單元 →</button>';
+    links += flagBtns(q.id);
     links += '<button class="btn ghost sm" data-act="master" data-id="' + q.id + '">' + (st.mastered ? '已標記掌握 ✓' : '標記為已掌握') + '</button>';
     return '<div class="rev-q ' + (isC ? 'isc' : 'isw') + '">' +
       '<div class="rev-head">' +
@@ -396,33 +409,75 @@
       }).join('');
   }
 
-  // ================= 錯題本 =================
-  function viewWrong() {
+  // ================= 複習清單（錯題 / 不熟悉 / 重要） =================
+  function flagListCount(which) {
+    var p = S.load(); var n = 0;
+    for (var id in (p.flags || {})) { if (BY_ID[id] && p.flags[id][which]) n++; }
+    return n;
+  }
+  function flagItem(q, which) {
+    var ru = relatedUnit(q);
+    return '<div class="wb-item">' +
+      '<div class="meta"><div class="stem">' + esc(q.stem) + '</div>' +
+      '<div class="mini">' + (sidOf(q) === 's1' ? '考科一' : '考科二') + ' · ' + SRC_LABEL[q.source] +
+      (q.unit ? ' · ' + esc(q.unit) : '') + '</div></div>' +
+      (ru ? '<button class="btn ghost sm" data-act="nav" data-h="#/learn/' + encodeURIComponent(ru.id) + '">單元</button>' : '') +
+      '<button class="btn ghost sm" data-act="flag" data-which="' + which + '" data-id="' + q.id + '">移除</button>' +
+      '</div>';
+  }
+  function viewWrong(arg) {
     var p = S.load(); var today = S.todayStr();
-    var items = BANK.filter(function (q) { var st = p.questionState[q.id]; return st && st.lapses > 0; })
+    var tab = (arg === 'unfamiliar' || arg === 'important') ? arg : 'wrong';
+    var wrongItems = BANK.filter(function (q) { var st = p.questionState[q.id]; return st && st.lapses > 0; })
       .map(function (q) { return { q: q, st: p.questionState[q.id] }; })
       .sort(function (a, b) { return (a.st.dueDate || '') < (b.st.dueDate || '') ? -1 : 1; });
-    var active = items.filter(function (it) { return !it.st.mastered; });
-    var head = '<div class="card"><h2>📕 錯題本</h2>' +
-      '<div class="desc" style="color:var(--muted)">凡答錯過的題目自動納入；連續答對可標記已掌握。</div>' +
-      (active.length ? '<button class="btn primary block" data-act="practice" data-scope="wrong" style="margin-top:12px">只練錯題（10 題）</button>' : '') +
-      '</div>';
-    if (!items.length) return head + emptyState('🎉', '目前沒有錯題', '去做今日模擬考吧', '#/');
-    var list = items.map(function (it) {
-      var st = it.st; var q = it.q;
-      var dueTxt, dueCls;
-      if (st.mastered) { dueTxt = '已掌握'; dueCls = 'ok'; }
-      else if (st.dueDate && st.dueDate <= today) { dueTxt = '待複習'; dueCls = 'due'; }
-      else { dueTxt = '下次 ' + (st.dueDate || '—'); dueCls = 'due'; }
-      return '<div class="wb-item">' +
-        '<div class="meta"><div class="stem">' + esc(q.stem) + '</div>' +
-        '<div class="mini">' + (sidOf(q) === 's1' ? '考科一' : '考科二') + ' · ' + SRC_LABEL[q.source] +
-        ' · 答錯 ' + st.lapses + ' 次 · 最近' + (st.lastResult === 'correct' ? '答對' : '答錯') + '</div></div>' +
-        '<span class="pill ' + dueCls + '">' + dueTxt + '</span>' +
-        '<button class="btn ghost sm" data-act="master" data-id="' + q.id + '">' + (st.mastered ? '↺' : '掌握') + '</button>' +
-        '</div>';
-    }).join('');
-    return head + '<div class="section-title">共 ' + items.length + ' 題（待複習 ' + active.length + '）</div>' + list;
+    var wrongActive = wrongItems.filter(function (it) { return !it.st.mastered; }).length;
+    var unfamN = flagListCount('unfamiliar');
+    var impN = flagListCount('important');
+
+    function seg(h, label, active) {
+      return '<button class="seg-btn' + (active ? ' active' : '') + '" data-act="nav" data-h="' + h + '">' + label + '</button>';
+    }
+    var head = '<div class="card"><h2>📕 複習清單</h2>' +
+      '<div class="seg">' +
+      seg('#/wrong', '錯題 ' + wrongActive, tab === 'wrong') +
+      seg('#/wrong/unfamiliar', '🤔 不熟悉 ' + unfamN, tab === 'unfamiliar') +
+      seg('#/wrong/important', '⭐ 重要 ' + impN, tab === 'important') +
+      '</div></div>';
+
+    if (tab === 'wrong') {
+      var topBtn = wrongActive ? '<button class="btn primary block" data-act="practice" data-scope="wrong" style="margin-top:12px">只練錯題（10 題）</button>' : '';
+      var card = '<div class="card"><div class="desc" style="color:var(--muted)">凡答錯過的題目自動納入；連續答對可標記已掌握。</div>' + topBtn + '</div>';
+      if (!wrongItems.length) return head + card + emptyState('🎉', '目前沒有錯題', '去做今日模擬考吧', '#/');
+      var list = wrongItems.map(function (it) {
+        var st = it.st; var q = it.q; var dueTxt, dueCls;
+        if (st.mastered) { dueTxt = '已掌握'; dueCls = 'ok'; }
+        else if (st.dueDate && st.dueDate <= today) { dueTxt = '待複習'; dueCls = 'due'; }
+        else { dueTxt = '下次 ' + (st.dueDate || '—'); dueCls = 'due'; }
+        return '<div class="wb-item">' +
+          '<div class="meta"><div class="stem">' + esc(q.stem) + '</div>' +
+          '<div class="mini">' + (sidOf(q) === 's1' ? '考科一' : '考科二') + ' · ' + SRC_LABEL[q.source] +
+          ' · 答錯 ' + st.lapses + ' 次 · 最近' + (st.lastResult === 'correct' ? '答對' : '答錯') + '</div></div>' +
+          '<span class="pill ' + dueCls + '">' + dueTxt + '</span>' +
+          '<button class="btn ghost sm" data-act="master" data-id="' + q.id + '">' + (st.mastered ? '↺' : '掌握') + '</button>' +
+          '</div>';
+      }).join('');
+      return head + card + '<div class="section-title">共 ' + wrongItems.length + ' 題（待複習 ' + wrongActive + '）</div>' + list;
+    }
+
+    // 不熟悉 / 重要
+    var which = tab;
+    var name = which === 'unfamiliar' ? '不熟悉' : '重要';
+    var scope = which === 'unfamiliar' ? 'unfam' : 'imp';
+    var qs = BANK.filter(function (q) { return S.isFlagged(q.id, which); });
+    var desc = which === 'unfamiliar'
+      ? '你在作答或檢討時手動標為「不熟悉」的題目，無論答對與否皆會收錄；點「移除」即可退出清單。'
+      : '你手動標為「重要」的題目，無論答對與否皆會收錄；點「移除」即可退出清單。';
+    var topB = qs.length ? '<button class="btn primary block" data-act="practice" data-scope="' + scope + '" style="margin-top:12px">只練' + name + '（10 題）</button>' : '';
+    var card2 = '<div class="card"><div class="desc" style="color:var(--muted)">' + desc + '</div>' + topB + '</div>';
+    if (!qs.length) return head + card2 + emptyState(which === 'unfamiliar' ? '🤔' : '⭐', '清單尚無題目', '去做練習並標記吧', '#/quiz');
+    var list2 = qs.map(function (q) { return flagItem(q, which); }).join('');
+    return head + card2 + '<div class="section-title">共 ' + qs.length + ' 題</div>' + list2;
   }
 
   // ================= 設定 =================
@@ -611,6 +666,7 @@
     if (act === 'quiz-unit') { startUnitQuiz(btn.dataset.id); return; }
     if (act === 'toggle-read') { toggleRead(btn.dataset.id); return; }
     if (act === 'master') { toggleMaster(btn.dataset.id); return; }
+    if (act === 'flag') { toggleFlagAct(btn.dataset.id, btn.dataset.which); return; }
     if (act === 'export') { doExport(); return; }
     if (act === 'import') { $('#import-file').click(); return; }
     if (act === 'reset') { doReset(); return; }
@@ -626,6 +682,8 @@
     else if (scope === 'gu') opts = { mode: 'practice', label: '單元題練習', filter: function (q) { return q.source === 'unit_practice'; } };
     else if (scope === 'au') opts = { mode: 'practice', label: '自編題練習', filter: function (q) { return q.source === 'authored'; } };
     else if (scope === 'wrong') opts = { mode: 'wrong', label: '只練錯題', filter: function (q) { var st = S.getState(q.id); return st.lapses > 0 && !st.mastered; } };
+    else if (scope === 'unfam') opts = { mode: 'practice', label: '只練不熟悉', filter: function (q) { return S.isFlagged(q.id, 'unfamiliar'); } };
+    else if (scope === 'imp') opts = { mode: 'practice', label: '只練重要', filter: function (q) { return S.isFlagged(q.id, 'important'); } };
     else return;
     lastPracticeOpts = opts;
     var round = buildRound(opts);
@@ -647,6 +705,13 @@
   function toggleMaster(id) {
     var st = S.getState(id); st.mastered = !st.mastered; S.save();
     toast(st.mastered ? '已標記為掌握' : '已取消掌握'); render();
+  }
+  function toggleFlagAct(id, which) {
+    var on = S.toggleFlag(id, which);
+    var name = which === 'unfamiliar' ? '不熟悉' : '重要';
+    toast(on ? '已加入「' + name + '」清單' : '已移出「' + name + '」清單');
+    var y = window.scrollY;   // 原位重繪，避免捲動跳回頂端
+    render(); window.scrollTo(0, y);
   }
   function doExport() {
     var blob = new Blob([S.exportJSON()], { type: 'application/json' });
