@@ -502,12 +502,25 @@
     return bar;
   }
   function hideBar() { if (_hlBar) _hlBar.classList.remove('show'); }
+  function endCursorRect(range) {
+    var r = range.cloneRange(); r.collapse(false);   // 收合到選取結尾
+    var rect = r.getBoundingClientRect();
+    if (!rect || (!rect.height && !rect.width)) {     // 收合後拿不到矩形時，退回最後一個行矩形
+      var rs = range.getClientRects();
+      if (rs && rs.length) rect = rs[rs.length - 1];
+    }
+    return rect;
+  }
+  // 顯示於選取「結尾游標」的正下方（避開 iOS 內建反白選單，它在上方）
   function showBarAt(rect) {
+    if (!rect) return;
     var bar = hlBar(); bar.classList.add('show');
-    var bw = bar.offsetWidth || 180, bh = bar.offsetHeight || 40;
-    var left = Math.min(Math.max(8, rect.left + rect.width / 2 - bw / 2), window.innerWidth - bw - 8);
-    var top = rect.top - bh - 10;
-    if (top < 8) top = rect.bottom + 10;
+    var bw = bar.offsetWidth || 200, bh = bar.offsetHeight || 40;
+    var cx = (typeof rect.right === 'number' ? rect.right : rect.left); // 結尾游標 x
+    var left = Math.min(Math.max(8, cx - bw / 2), window.innerWidth - bw - 8);
+    var top = rect.bottom + 12;
+    if (top + bh > window.innerHeight - 8) top = rect.top - bh - 12; // 下方放不下才改放上方
+    if (top < 8) top = 8;
     bar.style.left = left + 'px'; bar.style.top = top + 'px';
   }
   function curSelection() {
@@ -525,7 +538,7 @@
     var onUp = function () {
       setTimeout(function () {
         var c = curSelection();
-        if (c) { _pendingSel = selectionRanges(); if (_pendingSel.length) showBarAt(c.range.getBoundingClientRect()); else { _pendingSel = null; hideBar(); } }
+        if (c) { _pendingSel = selectionRanges(); if (_pendingSel.length) showBarAt(endCursorRect(c.range)); else { _pendingSel = null; hideBar(); } }
         else { _pendingSel = null; hideBar(); }
       }, 10);
     };
