@@ -477,7 +477,7 @@
 
   // ================= 螢光筆 =================
   var HL_COLORS = [['y', '黃'], ['g', '綠'], ['p', '粉'], ['b', '藍']];
-  var _hlBar = null, _hlUid = null, _hlDocBound = false;
+  var _hlBar = null, _hlUid = null, _hlDocBound = false, _pendingSel = null;
   function hlBar() {
     if (_hlBar) return _hlBar;
     var bar = document.createElement('div');
@@ -486,11 +486,19 @@
       return '<button class="hl-sw hl-' + c[0] + '" data-hlc="' + c[0] + '" title="' + c[1] + '"></button>';
     }).join('') + '<button class="hl-x" data-hlc="erase" title="清除">⌫</button>';
     document.body.appendChild(bar);
-    bar.addEventListener('mousedown', function (e) { e.preventDefault(); }); // 保留選取
-    bar.addEventListener('click', function (e) {
+    // 保留選取：工具列上的按壓不得清掉文字選取
+    bar.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    bar.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
+    var _busy = false;
+    var act = function (e) {
       var b = e.target.closest('[data-hlc]'); if (!b) return;
+      e.preventDefault();
+      if (_busy) return; _busy = true; setTimeout(function () { _busy = false; }, 500);
       if (b.dataset.hlc === 'erase') eraseSelection(); else applySelection(b.dataset.hlc);
-    });
+    };
+    bar.addEventListener('touchend', act);   // iOS：touchstart 被 preventDefault 時 click 可能不觸發
+    bar.addEventListener('click', act);      // 桌機
+    _hlBar = bar;          // ← 單例：先前漏設，導致每次都新建一條且無法隱藏
     return bar;
   }
   function hideBar() { if (_hlBar) _hlBar.classList.remove('show'); }
@@ -514,7 +522,13 @@
   function setupHighlighter(uid) {
     _hlUid = uid;
     var main = $('#learn-main'); if (!main) return;
-    var onUp = function () { setTimeout(function () { var c = curSelection(); if (c) showBarAt(c.range.getBoundingClientRect()); else hideBar(); }, 10); };
+    var onUp = function () {
+      setTimeout(function () {
+        var c = curSelection();
+        if (c) { _pendingSel = selectionRanges(); if (_pendingSel.length) showBarAt(c.range.getBoundingClientRect()); else { _pendingSel = null; hideBar(); } }
+        else { _pendingSel = null; hideBar(); }
+      }, 10);
+    };
     main.addEventListener('mouseup', onUp);
     main.addEventListener('touchend', onUp);
     if (!_hlDocBound) {
@@ -537,24 +551,30 @@
     });
     return out;
   }
-  function reapply(el) { el.innerHTML = applyHL(_hlUid, el.getAttribute('data-hk'), el.textContent); }
+  function reapply(el) { if (el && el.isConnected !== false) el.innerHTML = applyHL(_hlUid, el.getAttribute('data-hk'), el.textContent); }
+  function activeRanges() {
+    // 以工具列出現時的快照為準；必要時回退到當前選取
+    if (_pendingSel && _pendingSel.length) return _pendingSel;
+    return selectionRanges();
+  }
+  function finishHL() { _pendingSel = null; clearSel(); hideBar(); }
   function applySelection(color) {
-    var ranges = selectionRanges(); if (!ranges.length) { hideBar(); return; }
+    var ranges = activeRanges(); if (!ranges.length) { finishHL(); return; }
     var p = S.load(); if (!p.highlights) p.highlights = {}; if (!p.highlights[_hlUid]) p.highlights[_hlUid] = [];
     ranges.forEach(function (r) { p.highlights[_hlUid].push({ key: r.key, start: r.start, end: r.end, color: color }); });
     S.save();
     ranges.forEach(function (r) { reapply(r.el); });
-    clearSel(); hideBar();
+    finishHL();
   }
   function eraseSelection() {
-    var ranges = selectionRanges(); if (!ranges.length) { hideBar(); return; }
+    var ranges = activeRanges(); if (!ranges.length) { finishHL(); return; }
     var p = S.load(); var arr = (p.highlights && p.highlights[_hlUid]) || [];
     ranges.forEach(function (r) {
       arr = arr.filter(function (h) { return !(h.key === r.key && h.start < r.end && h.end > r.start); });
     });
     p.highlights[_hlUid] = arr; S.save();
     ranges.forEach(function (r) { reapply(r.el); });
-    clearSel(); hideBar();
+    finishHL();
   }
   function clearSel() { var s = window.getSelection(); if (s && s.removeAllRanges) s.removeAllRanges(); }
 
