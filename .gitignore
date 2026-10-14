@@ -1,0 +1,10 @@
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+
+# 來源教材與考題（版權／研究素材，不publish）
+*.csv
+考科1*.md
+考科2*.md
+需求規劃書.md
