@@ -1,6 +1,6 @@
 /* ===== sw.js — Service Worker：安裝到桌面 + 完全離線快取 ===== */
 /* 更新內容時把版本號 +1，即可讓使用者端更新快取 */
-const CACHE = 'ipas-netzero-v1';
+const CACHE = 'ipas-netzero-v2';
 
 /* App shell：以相對路徑列出，兼容 file://、localhost 與 GitHub Pages 子路徑 */
 const ASSETS = [

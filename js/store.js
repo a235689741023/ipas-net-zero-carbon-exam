@@ -27,6 +27,7 @@
       dailyLog: {},        // 'YYYY-MM-DD' -> {servedIds:[], rounds, correct, total}
       currentRound: null,  // 進行中的回合，供續作
       learningRead: {},    // unitId -> true
+      highlights: {},      // unitId -> [{key,start,end,color}]（學習區螢光標記）
       settings: { roundSize:10, shuffleOptions:true, theme:'auto' },
       createdAt: new Date().toISOString()
     };

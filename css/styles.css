@@ -214,3 +214,21 @@ select.sel{padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);b
   border-radius:var(--radius-sm);padding:10px 14px;font-size:14px;margin:10px 0}
 .kbd-hint{font-size:12px;color:var(--muted);margin-top:8px}
 .src-legend{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+
+/* ===== 學習螢光筆 ===== */
+.hlable{cursor:text}
+mark.hl{border-radius:2px;padding:0 1px;color:#17202e;background:transparent}
+mark.hl-y{background:#ffe866}
+mark.hl-g{background:#b6ec9a}
+mark.hl-p{background:#ffb3d1}
+mark.hl-b{background:#9cd2ff}
+.hl-bar{position:fixed;z-index:60;display:none;gap:6px;align-items:center;
+  background:var(--surface);border:1px solid var(--border);border-radius:999px;
+  padding:6px 8px;box-shadow:0 4px 16px rgba(0,0,0,.22)}
+.hl-bar.show{display:flex}
+.hl-sw{width:26px;height:26px;border-radius:50%;border:2px solid rgba(0,0,0,.15);cursor:pointer;padding:0}
+.hl-sw.hl-y{background:#ffe866}.hl-sw.hl-g{background:#b6ec9a}.hl-sw.hl-p{background:#ffb3d1}.hl-sw.hl-b{background:#9cd2ff}
+.hl-sw:hover{transform:scale(1.12)}
+.hl-x{width:30px;height:26px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);
+  color:var(--muted);cursor:pointer;font-size:14px;line-height:1}
+.hl-x:hover{color:var(--bad)}

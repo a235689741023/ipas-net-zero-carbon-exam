@@ -116,6 +116,7 @@
 
   function render() {
     applyTheme();
+    if (_hlBar) hideBar();
     var r = route(); var main = $('#app-main'); var html = '';
     switch (r.name) {
       case 'home': html = viewHome(); break;
@@ -291,34 +292,53 @@
         }).join('');
     }).join('');
   }
-  function renderBlock(b) {
-    if (b.type === 'list') return '<ul>' + b.items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') + '</ul>';
-    if (b.type === 'olist') return '<ol>' + b.items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') + '</ol>';
-    if (b.type === 'sub') return '<h4 class="unit-subhead">' + esc(b.text) + '</h4>';
-    if (b.type === 'figure') return '<div class="figure-note">🖼 ' + esc(b.text) + '<span>（圖表請參見原教材）</span></div>';
-    if (b.type === 'callout') return '<div class="callout">' + (b.title ? '<div class="callout-t">' + esc(b.title) + '</div>' : '') + '<div>' + esc(b.text) + '</div></div>';
+  // ---- 螢光筆：依「元素 key + 字元位置」還原標記 ----
+  function unitHLs(uid) { var h = S.load().highlights || {}; return h[uid] || []; }
+  function applyHL(uid, key, text) {
+    var hs = unitHLs(uid).filter(function (h) { return h.key === key; });
+    if (!hs.length) return esc(text);
+    var n = text.length, col = new Array(n);
+    hs.forEach(function (h) { for (var i = Math.max(0, h.start); i < Math.min(n, h.end); i++) col[i] = h.color; });
+    var out = '', i = 0;
+    while (i < n) {
+      var c = col[i], j = i; while (j < n && col[j] === c) j++;
+      var seg = esc(text.slice(i, j));
+      out += c ? '<mark class="hl hl-' + esc(c) + '">' + seg + '</mark>' : seg;
+      i = j;
+    }
+    return out;
+  }
+  function hel(tag, cls, uid, key, text) {
+    return '<' + tag + ' class="hlable' + (cls ? ' ' + cls : '') + '" data-hk="' + key + '">' + applyHL(uid, key, text) + '</' + tag + '>';
+  }
+  function renderBlock(b, uid, base) {
+    if (b.type === 'list') return '<ul>' + b.items.map(function (it, ii) { return hel('li', '', uid, base + 'i' + ii, it); }).join('') + '</ul>';
+    if (b.type === 'olist') return '<ol>' + b.items.map(function (it, ii) { return hel('li', '', uid, base + 'o' + ii, it); }).join('') + '</ol>';
+    if (b.type === 'sub') return hel('h4', 'unit-subhead', uid, base, b.text);
+    if (b.type === 'figure') return '<div class="figure-note">🖼 <span class="hlable" data-hk="' + base + '">' + applyHL(uid, base, b.text) + '</span><span>（圖表請參見原教材）</span></div>';
+    if (b.type === 'callout') return '<div class="callout">' + (b.title ? '<div class="callout-t">' + esc(b.title) + '</div>' : '') + hel('div', '', uid, base + 'co', b.text) + '</div>';
     if (b.type === 'table') {
       var head = (b.headers || []).map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
-      var rows = (b.rows || []).map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('');
-      return '<div class="tbl-wrap">' + (b.caption ? '<div class="tbl-cap">' + esc(b.caption) + '</div>' : '') +
+      var rows = (b.rows || []).map(function (r, ri) { return '<tr>' + r.map(function (c, ci) { return hel('td', '', uid, base + 'r' + ri + 'c' + ci, c); }).join('') + '</tr>'; }).join('');
+      return '<div class="tbl-wrap">' + (b.caption ? hel('div', 'tbl-cap', uid, base + 'cap', b.caption) : '') +
         '<table class="data-tbl"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
-    return '<p>' + esc(b.text) + '</p>';
+    return hel('p', '', uid, base, b.text);
   }
   function viewUnit(uid) {
     var u = UNIT_BY_ID[uid]; if (!u) return viewLearnHome();
     var p = S.load(); var read = !!p.learningRead[uid];
     var mk = u.mustKnow && u.mustKnow.length
-      ? '<div class="mustknow"><h4>★ 必背重點</h4><ul>' + u.mustKnow.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join('') + '</ul></div>' : '';
+      ? '<div class="mustknow"><h4>★ 必背重點</h4><ul>' + u.mustKnow.map(function (m, i) { return hel('li', '', uid, 'mk' + i, m); }).join('') + '</ul></div>' : '';
     var tm = u.terms && u.terms.length
       ? '<div class="termcards"><h4>🔑 關鍵名詞（中英對照）</h4><div class="term-grid">' +
-        u.terms.map(function (t) {
-          return '<div class="term"><div class="term-zh">' + esc(t.zh) + '</div>' +
-            (t.en && t.en !== '—' ? '<div class="term-en">' + esc(t.en) + '</div>' : '') +
-            (t.def ? '<div class="term-def">' + esc(t.def) + '</div>' : '') + '</div>';
+        u.terms.map(function (t, i) {
+          return '<div class="term">' + hel('div', 'term-zh', uid, 'tz' + i, t.zh) +
+            (t.en && t.en !== '—' ? hel('div', 'term-en', uid, 'te' + i, t.en) : '') +
+            (t.def ? hel('div', 'term-def', uid, 'td' + i, t.def) : '') + '</div>';
         }).join('') + '</div></div>' : '';
-    var body = u.sections.map(function (sec) {
-      var blocks = sec.blocks.map(renderBlock).join('');
+    var body = u.sections.map(function (sec, si) {
+      var blocks = sec.blocks.map(function (b, bi) { return renderBlock(b, uid, 's' + si + 'b' + bi); }).join('');
       return '<div class="unit-sec"><h3>' + esc(sec.heading) + '</h3>' + blocks + '</div>';
     }).join('');
     var qCount = BANK.filter(unitFilter(u)).length;
@@ -423,6 +443,9 @@
       '</div>' +
       '<div class="src-legend" style="margin-top:10px">資料僅存於本機瀏覽器，不會上傳；清除瀏覽器資料將歸零。</div>' +
       '</div>' +
+      '<div class="card"><div class="section-title" style="margin-top:0">學習螢光標記</div>' +
+      '<div class="desc" style="color:var(--muted);margin-bottom:10px">在「學習」頁反白選取字句即可上螢光色；標記會隨進度一起匯出／匯入。</div>' +
+      '<button class="btn" data-act="clear-hl">清除全部螢光標記</button></div>' +
       '<div class="card"><div class="section-title" style="margin-top:0">危險操作</div>' +
       '<button class="btn" data-act="reset" style="color:var(--bad)">重設所有進度</button></div>' +
       '<div class="src-legend" style="text-align:center;justify-content:center">iPAS 淨零碳規劃管理師（初級）模擬考 · 單機離線 · v1.0</div>';
@@ -448,7 +471,92 @@
     // 搜尋
     var sb = $('#learn-search');
     if (sb) sb.addEventListener('input', function () { runSearch(sb.value); });
+    // 螢光筆（學習單元頁）
+    if (r.name === 'learn' && r.arg) setupHighlighter(r.arg);
   }
+
+  // ================= 螢光筆 =================
+  var HL_COLORS = [['y', '黃'], ['g', '綠'], ['p', '粉'], ['b', '藍']];
+  var _hlBar = null, _hlUid = null, _hlDocBound = false;
+  function hlBar() {
+    if (_hlBar) return _hlBar;
+    var bar = document.createElement('div');
+    bar.className = 'hl-bar'; bar.id = 'hl-bar';
+    bar.innerHTML = HL_COLORS.map(function (c) {
+      return '<button class="hl-sw hl-' + c[0] + '" data-hlc="' + c[0] + '" title="' + c[1] + '"></button>';
+    }).join('') + '<button class="hl-x" data-hlc="erase" title="清除">⌫</button>';
+    document.body.appendChild(bar);
+    bar.addEventListener('mousedown', function (e) { e.preventDefault(); }); // 保留選取
+    bar.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-hlc]'); if (!b) return;
+      if (b.dataset.hlc === 'erase') eraseSelection(); else applySelection(b.dataset.hlc);
+    });
+    return bar;
+  }
+  function hideBar() { if (_hlBar) _hlBar.classList.remove('show'); }
+  function showBarAt(rect) {
+    var bar = hlBar(); bar.classList.add('show');
+    var bw = bar.offsetWidth || 180, bh = bar.offsetHeight || 40;
+    var left = Math.min(Math.max(8, rect.left + rect.width / 2 - bw / 2), window.innerWidth - bw - 8);
+    var top = rect.top - bh - 10;
+    if (top < 8) top = rect.bottom + 10;
+    bar.style.left = left + 'px'; bar.style.top = top + 'px';
+  }
+  function curSelection() {
+    var s = window.getSelection();
+    if (!s || s.isCollapsed || !s.rangeCount) return null;
+    var main = $('#learn-main'); if (!main) return null;
+    var rg = s.getRangeAt(0);
+    if (!main.contains(rg.commonAncestorContainer)) return null;
+    if (!String(s).trim()) return null;
+    return { sel: s, range: rg };
+  }
+  function setupHighlighter(uid) {
+    _hlUid = uid;
+    var main = $('#learn-main'); if (!main) return;
+    var onUp = function () { setTimeout(function () { var c = curSelection(); if (c) showBarAt(c.range.getBoundingClientRect()); else hideBar(); }, 10); };
+    main.addEventListener('mouseup', onUp);
+    main.addEventListener('touchend', onUp);
+    if (!_hlDocBound) {
+      _hlDocBound = true;
+      document.addEventListener('selectionchange', function () { if (_hlBar && _hlBar.classList.contains('show') && !curSelection()) hideBar(); });
+    }
+  }
+  // 計算選取在各 [data-hk] 元素內的字元範圍
+  function selectionRanges() {
+    var c = curSelection(); if (!c) return [];
+    var main = $('#learn-main'); var rg = c.range; var out = [];
+    $all('[data-hk]', main).forEach(function (el) {
+      var intersects = rg.intersectsNode ? rg.intersectsNode(el) : (el.contains(rg.startContainer) || el.contains(rg.endContainer) || rg.commonAncestorContainer.contains && rg.commonAncestorContainer.contains(el));
+      if (!intersects) return;
+      var total = el.textContent.length;
+      var start = 0, end = total;
+      if (el.contains(rg.startContainer)) { var r1 = document.createRange(); r1.selectNodeContents(el); try { r1.setEnd(rg.startContainer, rg.startOffset); start = r1.toString().length; } catch (e) { } }
+      if (el.contains(rg.endContainer)) { var r2 = document.createRange(); r2.selectNodeContents(el); try { r2.setEnd(rg.endContainer, rg.endOffset); end = r2.toString().length; } catch (e) { } }
+      if (end > start) out.push({ el: el, key: el.getAttribute('data-hk'), start: start, end: end });
+    });
+    return out;
+  }
+  function reapply(el) { el.innerHTML = applyHL(_hlUid, el.getAttribute('data-hk'), el.textContent); }
+  function applySelection(color) {
+    var ranges = selectionRanges(); if (!ranges.length) { hideBar(); return; }
+    var p = S.load(); if (!p.highlights) p.highlights = {}; if (!p.highlights[_hlUid]) p.highlights[_hlUid] = [];
+    ranges.forEach(function (r) { p.highlights[_hlUid].push({ key: r.key, start: r.start, end: r.end, color: color }); });
+    S.save();
+    ranges.forEach(function (r) { reapply(r.el); });
+    clearSel(); hideBar();
+  }
+  function eraseSelection() {
+    var ranges = selectionRanges(); if (!ranges.length) { hideBar(); return; }
+    var p = S.load(); var arr = (p.highlights && p.highlights[_hlUid]) || [];
+    ranges.forEach(function (r) {
+      arr = arr.filter(function (h) { return !(h.key === r.key && h.start < r.end && h.end > r.start); });
+    });
+    p.highlights[_hlUid] = arr; S.save();
+    ranges.forEach(function (r) { reapply(r.el); });
+    clearSel(); hideBar();
+  }
+  function clearSel() { var s = window.getSelection(); if (s && s.removeAllRanges) s.removeAllRanges(); }
 
   function onAction(e) {
     var btn = e.target.closest('[data-act]'); if (!btn) return;
@@ -473,6 +581,7 @@
     if (act === 'export') { doExport(); return; }
     if (act === 'import') { $('#import-file').click(); return; }
     if (act === 'reset') { doReset(); return; }
+    if (act === 'clear-hl') { doClearHL(); return; }
   }
 
   var lastPracticeOpts = null;
@@ -512,6 +621,12 @@
     a.download = 'nzexam-progress-' + S.todayStr() + '.json'; a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     toast('已匯出進度');
+  }
+  function doClearHL() {
+    var p = S.load(); var n = 0; for (var k in (p.highlights || {})) n += (p.highlights[k] || []).length;
+    if (!n) { toast('目前沒有螢光標記'); return; }
+    if (!confirm('確定清除全部 ' + n + ' 處螢光標記嗎？此動作無法復原。')) return;
+    p.highlights = {}; S.save(); toast('已清除螢光標記'); render();
   }
   function doReset() {
     if (!confirm('確定要重設所有進度嗎？此動作無法復原。')) return;
